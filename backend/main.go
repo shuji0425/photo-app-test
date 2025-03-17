@@ -2,25 +2,30 @@ package main
 
 import (
 	"backend/middlewares"
+	"context"
 	"fmt"
+	"mime/multipart"
 	"net/http"
-	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
-const uploadDir = "./uploads"
+const (
+	endpoint        = "localhost:9000"
+	accessKeyID     = "admin123"
+	secretAccessKey = "admin123"
+	bucketName      = "photo"
+	useSSL          = false
+)
 
 func main() {
 	// Ginのルーター作成
 	r := gin.Default()
 	// CORSの設定
 	middlewares.SetupCORS(r)
-
-	// アップロードディレクトリがないときは作成
-	if _, err := os.Stat(uploadDir); os.IsNotExist(err) {
-		os.Mkdir(uploadDir, os.ModePerm)
-	}
 
 	// 画像を格納するディレクトリを静的ファイルサーバーとして公開
 	r.Static("/images", "./uploads")
@@ -43,44 +48,85 @@ func uploadHnadler(c *gin.Context) {
 	}
 
 	files := form.File["images"]
+	var uploadedURLs []string
 
 	// アップロードされたファイルを保存
 	for _, file := range files {
-		// 保存先のパスを指定
-		filePath := fmt.Sprintf("%s/%s", uploadDir, file.Filename)
-		// ファイルを保存
-		if err := c.SaveUploadedFile(file, filePath); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "ファイルの保存に失敗しました"})
+		// クラウドにアップロード
+		openedFile, err := file.Open()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "ファイルを開けませんでした"})
 			return
 		}
+		defer openedFile.Close()
+
+		cloudURL, err := uploadToCloud(openedFile, file.Filename)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "クラウドへのアップロードに失敗しました"})
+			return
+		}
+
+		uploadedURLs = append(uploadedURLs, cloudURL)
 	}
 
 	// 成功レスポンス
-	c.JSON(http.StatusOK, gin.H{"message": "ファイルアップロードに成功しました"})
+	c.JSON(http.StatusOK, gin.H{"message": "ファイルアップロードに成功しました", "cloudURLs": uploadedURLs})
+}
+
+// クラウドにファイルをアップロードする
+func uploadToCloud(file multipart.File, fileName string) (string, error) {
+	// クライアント作成
+	cloudClient, err := minio.New(endpoint, &minio.Options{
+		Creds:  credentials.NewStaticV4(accessKeyID, secretAccessKey, ""),
+		Secure: useSSL,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	// ファイル名の重複を避けるためタイムスタンプを付与
+	uniqueFileName := fmt.Sprintf("%d-%s", time.Now().UnixNano(), fileName)
+
+	// アップロード
+	_, err = cloudClient.PutObject(
+		context.Background(), bucketName, uniqueFileName, file, -1, minio.PutObjectOptions{ContentType: "image/jpeg"},
+	)
+	if err != nil {
+		return "", nil
+	}
+
+	// クラウドのファイルURLを作成
+	cloudURL := fmt.Sprintf("http://%s/%s/%s", endpoint, bucketName, uniqueFileName)
+	return cloudURL, nil
 }
 
 // 写真を全て取得
 func getImageHandler(c *gin.Context) {
-	// 画像ファイルが保存されているディレクトリパス
-	uploadDir := "./uploads"
-
-	// ファイルをリストアップ
-	files, err := os.ReadDir(uploadDir)
+	// クライアント作成
+	cloudClient, err := minio.New(endpoint, &minio.Options{
+		Creds:  credentials.NewStaticV4(accessKeyID, secretAccessKey, ""),
+		Secure: useSSL,
+	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to read files"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "クラウドの接続に失敗しました"})
 		return
 	}
 
-	// 画像ファイルのメタデータを格納
+	// バケット内のオブジェクト一覧を取得
 	var imageList []map[string]string
-	for _, file := range files {
-		if !file.IsDir() {
-			// ファイルディレクトリでないときはファイルのURLを構築
-			imageList = append(imageList, map[string]string{
-				"id":  file.Name(),
-				"url": "/images/" + file.Name(),
-			})
+	objectCh := cloudClient.ListObjects(context.Background(), bucketName, minio.ListObjectsOptions{})
+
+	for object := range objectCh {
+		if object.Err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "クラウドの画像取得に失敗しました"})
+			return
 		}
+
+		// クラウド上の画像URLを作成
+		imageList = append(imageList, map[string]string{
+			"id":  object.Key,
+			"url": fmt.Sprintf("http://%s/%s/%s", endpoint, bucketName, object.Key),
+		})
 	}
 
 	// 画像リストを返却

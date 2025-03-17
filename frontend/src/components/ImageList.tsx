@@ -7,7 +7,6 @@ interface Image {
 
 const ImageList = () => {
   const [image, setImage] = useState<Image[]>([]);
-  const baseURL = "http://localhost:8080";
 
   const fetchImages = async () => {
     const response = await fetch("http://localhost:8080/get/images");
@@ -25,7 +24,7 @@ const ImageList = () => {
       <div className="grid grid-cols-5 gap-4">
         {image ? image.map((image) => (
           <div key={image.id} className="border p-2">
-            <img src={baseURL + image.url} alt={`Image ${image.id}`} className="w-full h-auto" loading="lazy" />
+            <img src={image.url} alt={`Image ${image.id}`} className="w-full h-auto" loading="lazy" />
           </div>
         )) : (
           <p>画像を追加してください。</p>
