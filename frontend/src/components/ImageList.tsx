@@ -19,15 +19,15 @@ const ImageList = () => {
   }, []);
 
   return (
-    <div>
-      <h2>画像一覧</h2>
-      <div className="grid grid-cols-5 gap-4">
+    <div className="p-2">
+      <h2 className="text-2xl font-semibold mb-4">画像一覧</h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
         {image ? image.map((image) => (
-          <div key={image.id} className="border p-2">
-            <img src={image.url} alt={`Image ${image.id}`} className="w-full h-auto" loading="lazy" />
+          <div key={image.id} className="bg-white shadow-lg rounded-lg overflow-hidden transform hover:scale-105 transition-transform duration-300">
+            <img src={image.url} alt={`Image ${image.id}`} className="w-full h-full object-cover" loading="lazy" />
           </div>
         )) : (
-          <p>画像を追加してください。</p>
+          <p className="col-span-full text-center text-gray-500">画像を追加してください。</p>
         )}
       </div>
     </div>
