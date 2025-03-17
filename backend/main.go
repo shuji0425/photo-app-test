@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"mime/multipart"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -50,24 +51,44 @@ func uploadHnadler(c *gin.Context) {
 	files := form.File["images"]
 	var uploadedURLs []string
 
+	// ゴルーチンの完了を待つ
+	var wg sync.WaitGroup
+	// 最大5つまで同時処理
+	sem := make(chan struct{}, 5)
+
 	// アップロードされたファイルを保存
 	for _, file := range files {
-		// クラウドにアップロード
-		openedFile, err := file.Open()
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "ファイルを開けませんでした"})
-			return
-		}
-		defer openedFile.Close()
+		wg.Add(1)
+		go func(f *multipart.FileHeader) {
+			defer wg.Done()
 
-		cloudURL, err := uploadToCloud(openedFile, file.Filename)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "クラウドへのアップロードに失敗しました"})
-			return
-		}
+			// 制限
+			sem <- struct{}{}
 
-		uploadedURLs = append(uploadedURLs, cloudURL)
+			// クラウドにアップロード
+			openedFile, err := file.Open()
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "ファイルを開けませんでした"})
+				return
+			}
+			defer openedFile.Close()
+
+			cloudURL, err := uploadToCloud(openedFile, file.Filename)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "クラウドへのアップロードに失敗しました"})
+				return
+			}
+
+			// アップロードURLをスライスに追加
+			uploadedURLs = append(uploadedURLs, cloudURL)
+
+			// ゴルーチン終了後にチャンネルから受け取る
+			<-sem
+		}(file)
 	}
+
+	// 全てのゴルーチンを待つ
+	wg.Wait()
 
 	// 成功レスポンス
 	c.JSON(http.StatusOK, gin.H{"message": "ファイルアップロードに成功しました", "cloudURLs": uploadedURLs})
