@@ -1,5 +1,6 @@
 import React, { useRef, useState } from "react";
 import axios from "axios";
+import { useImageCompressor } from "../hooks/useImageCompressor";
 
 const UploadForm = () => {
   const [images, setImages] = useState<File[]>([]);
@@ -7,6 +8,7 @@ const UploadForm = () => {
   const [isUploading, setIsUploading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const { compressImage, compressionProgress } = useImageCompressor();
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files) {
@@ -14,6 +16,12 @@ const UploadForm = () => {
       setImages(files);
     }
   };
+
+  // 進捗計算
+  const updateProgress = (uploadProgress: number) => {
+    const totalProgress = Math.round(compressionProgress * 0.5 + uploadProgress * 0.5);
+    setUploadProgress(totalProgress);
+  }
 
   // フォーム送信時のハンドラー
   const handleUpload = async (event: React.FormEvent) => {
@@ -24,14 +32,33 @@ const UploadForm = () => {
       return;
     }
 
-    setMessage("")        // メッセージを初期化
+    setMessage("");       // メッセージを初期化
     setIsUploading(true); // アップロード開始
     setUploadProgress(0); // 進捗リセット
 
     const formData = new FormData();
-    images.forEach((image) => {
-      formData.append("images", image);
-    });
+
+    try {
+      // 画像をpicaで圧縮
+      const compressedPromises = images.map(async (image) => {
+        return await compressImage(image, "image/webp");
+      });
+
+      // 圧縮が完了するまで待機
+      const compressedImages = await Promise.allSettled(compressedPromises);
+
+      // フォームに格納
+      compressedImages.forEach((result) => {
+        if (result.status === "fulfilled") {
+          formData.append("images", result.value);
+        } else {
+          setMessage("画像の圧縮に失敗しまいしました");
+        }
+      });
+    } catch (error) {
+      setMessage("画像の圧縮に失敗しまいしました");
+      console.error("画像圧縮失敗:", error);
+    }
 
     try {
       const response = await axios.post(
@@ -43,6 +70,8 @@ const UploadForm = () => {
               (progressEvent.loaded * 100) / (progressEvent.total || 1)
             );
             setUploadProgress(Math.min(percent, 99));
+            // アップロード進捗を更新
+            updateProgress(percent);
           },
         }
       );

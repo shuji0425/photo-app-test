@@ -53,8 +53,8 @@ func uploadHnadler(c *gin.Context) {
 
 	// ゴルーチンの完了を待つ
 	var wg sync.WaitGroup
-	// 最大5つまで同時処理
-	sem := make(chan struct{}, 5)
+	// 3~5つまで同時処理
+	sem := make(chan struct{}, 3)
 
 	// アップロードされたファイルを保存
 	for _, file := range files {
