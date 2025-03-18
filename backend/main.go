@@ -60,7 +60,7 @@ func uploadHnadler(c *gin.Context) {
 
 	// ゴルーチンの完了を待つ
 	var wg sync.WaitGroup
-	// 3~5つまで同時処理
+	// 同時処理の個数
 	sem := make(chan struct{}, 10)
 
 	// アップロードされたファイルを保存
@@ -112,7 +112,6 @@ func processAndUpload(fileHeader *multipart.FileHeader) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	start := time.Now()
 
 	// 画像の幅または高さが1024pxより大きい場合にリサイズする
 	imgBounds := img.Bounds()
@@ -123,9 +122,6 @@ func processAndUpload(fileHeader *multipart.FileHeader) (string, error) {
 	if width > 1024 || height > 1024 {
 		// 画像をリサイズ（幅1024pxに縮小）
 		img = imaging.Resize(img, 1024, 0, imaging.Linear)
-		fmt.Println("resize time", time.Since(start))
-	} else {
-		fmt.Println("resize skipped", time.Since(start))
 	}
 
 	// 一時ファイルを作成
@@ -144,20 +140,9 @@ func processAndUpload(fileHeader *multipart.FileHeader) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// // 読み込み位置をリセット
-	// tempFile.Seek(0, 0)
 
-	// // 再度ファイルを開き直す
-	// uploadFile, err := os.Open(tempFile.Name())
-	// if err != nil {
-	// 	return "", err
-	// }
-	// defer uploadFile.Close()
-
-	start = time.Now()
 	// アップロード
 	cloudURL, err := uploadToCloud(&buffer, fileHeader)
-	fmt.Println("upload time", time.Since(start))
 	if err != nil {
 		return "", err
 	}
@@ -183,12 +168,6 @@ func uploadToCloud(buffer *bytes.Buffer, fileHeader *multipart.FileHeader) (stri
 
 	// ファイル名の重複を避けるためタイムスタンプを付与
 	uniqueFileName := fmt.Sprintf("%d-%s", time.Now().UnixNano(), fileHeader.Filename)
-
-	// // ファイルを取得
-	// fileInfo, err := file.Stat()
-	// if err != nil {
-	// 	return "", err
-	// }
 
 	// マルチパートアップロードの最適化（5MBチャンク）
 	partSize := 5 * 1024 * 1024

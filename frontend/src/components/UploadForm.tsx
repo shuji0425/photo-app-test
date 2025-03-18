@@ -47,9 +47,7 @@ const UploadForm = () => {
       });
 
       // 圧縮が完了するまで待機
-      console.time("resize");
       const compressedImages = await Promise.all(compressedPromises);
-      console.timeEnd("resize");
       // フォームに格納
       compressedImages.forEach((image) => {
         formData.append("images", image);
