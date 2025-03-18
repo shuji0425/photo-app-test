@@ -19,9 +19,11 @@ const UploadForm = () => {
 
   // 進捗計算
   const updateProgress = (uploadProgress: number) => {
-    const totalProgress = Math.round(compressionProgress * 0.5 + uploadProgress * 0.5);
+    const totalProgress = Math.round(
+      compressionProgress * 0.5 + uploadProgress * 0.5
+    );
     setUploadProgress(totalProgress);
-  }
+  };
 
   // フォーム送信時のハンドラー
   const handleUpload = async (event: React.FormEvent) => {
@@ -32,7 +34,7 @@ const UploadForm = () => {
       return;
     }
 
-    setMessage("");       // メッセージを初期化
+    setMessage(""); // メッセージを初期化
     setIsUploading(true); // アップロード開始
     setUploadProgress(0); // 進捗リセット
 
@@ -45,15 +47,12 @@ const UploadForm = () => {
       });
 
       // 圧縮が完了するまで待機
-      const compressedImages = await Promise.allSettled(compressedPromises);
-
+      console.time("resize");
+      const compressedImages = await Promise.all(compressedPromises);
+      console.timeEnd("resize");
       // フォームに格納
-      compressedImages.forEach((result) => {
-        if (result.status === "fulfilled") {
-          formData.append("images", result.value);
-        } else {
-          setMessage("画像の圧縮に失敗しまいしました");
-        }
+      compressedImages.forEach((image) => {
+        formData.append("images", image);
       });
     } catch (error) {
       setMessage("画像の圧縮に失敗しまいしました");
@@ -80,7 +79,7 @@ const UploadForm = () => {
         setMessage("アップロード成功");
         setUploadProgress(100);
         setImages([]);
-        // inputタグをからにする
+        // inputタグを空にする
         if (inputRef.current) {
           inputRef.current.value = "";
         }

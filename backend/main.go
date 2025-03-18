@@ -2,6 +2,7 @@ package main
 
 import (
 	"backend/middlewares"
+	"bytes"
 	"context"
 	"fmt"
 	"image"
@@ -113,9 +114,19 @@ func processAndUpload(fileHeader *multipart.FileHeader) (string, error) {
 	}
 	start := time.Now()
 
-	// 画像をリサイズ（幅1024pxに縮小）
-	resizedImg := imaging.Resize(img, 1024, 0, imaging.Linear)
-	fmt.Println("resize time", time.Since(start))
+	// 画像の幅または高さが1024pxより大きい場合にリサイズする
+	imgBounds := img.Bounds()
+	width := imgBounds.Dx()
+	height := imgBounds.Dy()
+
+	// リサイズ前に画像の幅を確認して希望通りなら飛ばす
+	if width > 1024 || height > 1024 {
+		// 画像をリサイズ（幅1024pxに縮小）
+		img = imaging.Resize(img, 1024, 0, imaging.Linear)
+		fmt.Println("resize time", time.Since(start))
+	} else {
+		fmt.Println("resize skipped", time.Since(start))
+	}
 
 	// 一時ファイルを作成
 	tempFile, err := os.CreateTemp("", "resized-*.webp")
@@ -125,24 +136,27 @@ func processAndUpload(fileHeader *multipart.FileHeader) (string, error) {
 	// 一時ファイルを削除
 	defer os.Remove(tempFile.Name())
 
-	// WebPに変換して保存
-	err = encodeWebP(tempFile, resizedImg)
-	if err != nil {
-		return "", err
-	}
-	// 読み込み位置をリセット
-	tempFile.Seek(0, 0)
+	// メモリ内のバッファを作成
+	var buffer bytes.Buffer
 
-	// 再度ファイルを開き直す
-	uploadFile, err := os.Open(tempFile.Name())
+	// WebPに変換して保存
+	err = encodeWebP(&buffer, img)
 	if err != nil {
 		return "", err
 	}
-	defer uploadFile.Close()
+	// // 読み込み位置をリセット
+	// tempFile.Seek(0, 0)
+
+	// // 再度ファイルを開き直す
+	// uploadFile, err := os.Open(tempFile.Name())
+	// if err != nil {
+	// 	return "", err
+	// }
+	// defer uploadFile.Close()
 
 	start = time.Now()
 	// アップロード
-	cloudURL, err := uploadToCloud(uploadFile, fileHeader)
+	cloudURL, err := uploadToCloud(&buffer, fileHeader)
 	fmt.Println("upload time", time.Since(start))
 	if err != nil {
 		return "", err
@@ -152,12 +166,12 @@ func processAndUpload(fileHeader *multipart.FileHeader) (string, error) {
 }
 
 // WebPにエンコード
-func encodeWebP(file *os.File, img image.Image) error {
-	return webp.Encode(file, img, &webp.Options{Lossless: false, Quality: 80})
+func encodeWebP(buffer *bytes.Buffer, img image.Image) error {
+	return webp.Encode(buffer, img, &webp.Options{Lossless: false, Quality: 80})
 }
 
 // クラウドにファイルをアップロードする
-func uploadToCloud(file *os.File, fileHeader *multipart.FileHeader) (string, error) {
+func uploadToCloud(buffer *bytes.Buffer, fileHeader *multipart.FileHeader) (string, error) {
 	// クライアント作成
 	cloudClient, err := minio.New(endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(accessKeyID, secretAccessKey, ""),
@@ -170,25 +184,25 @@ func uploadToCloud(file *os.File, fileHeader *multipart.FileHeader) (string, err
 	// ファイル名の重複を避けるためタイムスタンプを付与
 	uniqueFileName := fmt.Sprintf("%d-%s", time.Now().UnixNano(), fileHeader.Filename)
 
-	// ファイルを取得
-	fileInfo, err := file.Stat()
-	if err != nil {
-		return "", err
-	}
+	// // ファイルを取得
+	// fileInfo, err := file.Stat()
+	// if err != nil {
+	// 	return "", err
+	// }
 
 	// マルチパートアップロードの最適化（5MBチャンク）
 	partSize := 5 * 1024 * 1024
 
 	// アップロード
 	_, err = cloudClient.PutObject(
-		context.Background(), bucketName, uniqueFileName, file, fileInfo.Size(),
+		context.Background(), bucketName, uniqueFileName, buffer, int64(buffer.Len()),
 		minio.PutObjectOptions{
 			ContentType: "image/jpeg",
 			PartSize:    uint64(partSize),
 		},
 	)
 	if err != nil {
-		return "", nil
+		return "", err
 	}
 
 	// クラウドのファイルURLを作成

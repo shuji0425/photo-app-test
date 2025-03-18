@@ -6,7 +6,10 @@ const pica = new Pica();
 export const useImageCompressor = () => {
   const [compressionProgress, setCompressionProgress] = useState(0);
 
-  const compressImage = async (file: File, format: "image/jpeg" | "image/webp" = "image/webp"): Promise<File> => {
+  const compressImage = async (
+    file: File,
+    format: "image/jpeg" | "image/webp" = "image/webp"
+  ): Promise<File> => {
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.src = URL.createObjectURL(file);
@@ -19,8 +22,8 @@ export const useImageCompressor = () => {
         // 画像をリサイズ&圧縮
         const resizedCanvas = await pica.resize(img, canvas, {
           unsharpAmount: 80,
-          unsharpRadius: 0.6,
-          unsharpThreshold: 2,
+          unsharpRadius: 0.4,
+          unsharpThreshold: 1.5,
         });
 
         // 圧縮率を更新
@@ -29,16 +32,22 @@ export const useImageCompressor = () => {
         resizedCanvas.toBlob(
           (blob) => {
             if (!blob) return reject("画像圧縮に失敗しました");
-            resolve(new File([blob], "compressed." + (format === "image/webp" ? "webp" : "jpg"), { type: format }));
+            resolve(
+              new File(
+                [blob],
+                "compressed." + (format === "image/webp" ? "webp" : "jpg"),
+                { type: format }
+              )
+            );
             setCompressionProgress(100);
           },
           format,
           0.8 // 圧縮率
         );
-      }
-        img.onerror = () => reject("画像の読み込みに失敗しました")
-    })
+      };
+      img.onerror = () => reject("画像の読み込みに失敗しました");
+    });
   };
 
-  return { compressImage, compressionProgress }
-}
+  return { compressImage, compressionProgress };
+};
