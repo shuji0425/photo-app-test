@@ -1,47 +1,9 @@
-import { useEffect, useState, useCallback, Suspense } from "react";
-
-interface Image {
-  id: string;
-  url: string;
-}
-
-// サイレンダリング削減
-const ImageCard = ({ image }: { image: Image }) => {
-  return (
-    <div className="bg-white shadow-lg rounded-lg overflow-hidden transform hover:scale-105 transition-transform duration-300">
-      <img
-        srcSet={`${image.url}?w=400&h=300&fit=crop 400w, ${image.url}?w=800&h=600&fit=crop 800w`}
-        sizes="(max-width: 640px) 400px, (max-width: 1024px) 800px, 1200px"
-        src={image.url}
-        alt={`Image ${image.id}`}
-        className="w-full h-full object-cover opacity-0 transition-opacity duration-500"
-        loading="lazy"
-        onLoad={(e) => e.currentTarget.classList.remove("opacity-0")}
-      />
-    </div>
-  );
-};
+import { Suspense } from "react";
+import { useImages } from "../hooks/useImages";
+import ImageCard from "./ImageCard";
 
 const ImageList = () => {
-  const [images, setImages] = useState<Image[]>([]);
-
-  // useCallbackでfetchImagesの再生成を防ぐ
-  const fetchImages = useCallback(async () => {
-    try {
-      const response = await fetch("http://localhost:8080/get/images");
-      if (!response.ok) {
-        throw new Error("ネットワークエラーが発生しました");
-      }
-      const data = await response.json();
-      setImages(data);
-    } catch (error) {
-      console.error("画像の読み込みに失敗しました:", error);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchImages();
-  }, [fetchImages]);
+  const { images } = useImages();
 
   return (
     <Suspense fallback={<p className="text-center">画像を読み込み中...</p>}>

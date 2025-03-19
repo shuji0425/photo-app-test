@@ -1,9 +1,19 @@
-// import { useState, useEffect } from "react";
+import useSWR from "swr";
+import { Image } from "../types/image";
 
-// export function useImage() {
-//   const [images, setImages] = useState<string[]>([]);
+const fetcher = (url: string): Promise<Image[]> =>
+  fetch(url).then((res) => res.json());
 
-//   useEffect(() => {
+// 画像取得
+export const useImages = () => {
+  const { data, error } = useSWR("http://localhost:8080/get/images", fetcher, {
+    suspense: true,
+    revalidateOnFocus: false, // フォーカス時の再フェッチを無効
+  });
 
-//   })
-// }
+  return {
+    images: data || [],
+    isLoading: !data && !error,
+    isError: error,
+  };
+};
