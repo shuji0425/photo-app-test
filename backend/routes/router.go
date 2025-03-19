@@ -3,7 +3,6 @@ package routes
 import (
 	"backend/handlers"
 	"backend/middlewares"
-	"fmt"
 
 	"github.com/gin-gonic/gin"
 )
@@ -18,8 +17,6 @@ func SetRouter() *gin.Engine {
 
 	// 画像を格納するディレクトリを静的ファイルサーバーとして公開
 	r.Static("/images", "./uploads")
-
-	fmt.Println("route was called")
 
 	// 画像のエンドポイント
 	r.GET("/get/images", handlers.GetImageHandler)
