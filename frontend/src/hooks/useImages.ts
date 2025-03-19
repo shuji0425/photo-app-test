@@ -6,10 +6,13 @@ const fetcher = (url: string): Promise<Image[]> =>
 
 // 画像取得
 export const useImages = () => {
-  const { data, error } = useSWR("http://localhost:8080/get/images", fetcher, {
-    suspense: true,
-    revalidateOnFocus: false, // フォーカス時の再フェッチを無効
-  });
+  const { data, error } = useSWR<Image[]>(
+    "http://localhost:8080/get/images",
+    fetcher,
+    {
+      revalidateOnFocus: false, // フォーカス時の再フェッチを無効
+    }
+  );
 
   return {
     images: data || [],
